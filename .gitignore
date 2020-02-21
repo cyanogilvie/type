@@ -1,0 +1,12 @@
+configure
+*.sw?
+core
+*.so
+*.o
+pkgIndex.tcl
+Makefile
+autom4te.cache
+config.log
+config.status
+tags
+last

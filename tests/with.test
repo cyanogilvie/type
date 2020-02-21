@@ -1,0 +1,165 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require type
+
+if {"tdom" in [package names]} {
+	tcltest::testConstraint tdom 1
+} else {
+	tcltest::testConstraint tdom 0
+}
+
+test with-0.1.1 {too few args} -body { #<<<
+	list [catch {type::with} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::with varname type script"} {TCL WRONGARGS}}
+#>>>
+test with-0.1.2 {too few args} -body { #<<<
+	list [catch {type::with foo} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::with varname type script"} {TCL WRONGARGS}}
+#>>>
+test with-0.1.3 {too few args} -body { #<<<
+	list [catch {type::with foo type} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::with varname type script"} {TCL WRONGARGS}}
+#>>>
+test with-0.1.4 {too many args} -body { #<<<
+	list [catch {type::with foo type {} baz} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::with varname type script"} {TCL WRONGARGS}}
+#>>>
+test with-0.2 {type is not defined} -body { #<<<
+	set xml {<foo><bar>Bar text</bar><baz>Baz text</baz></foo>}
+	list [catch {type::with xml with-0.2 {}} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o xml
+} -result {1 {Type "with-0.2" is not defined} NONE}
+#>>>
+test with-0.3 {var doesn't exist} -constraints tdom -body { #<<<
+	package require tdom
+	type::define with-0.3 {
+		create	{apply {val {
+			dom parse $val
+		}}}
+		dup		{apply {doc {
+			dom parse [[$doc documentElement] asXML]
+		}}}
+		free	{apply {doc {
+			$doc delete
+		}}}
+		string	{apply {doc {
+			$doc asXML
+		}}}
+	}
+	list [catch {type::with xml with-0.3 {}} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o xml
+} -result {1 {can't read "xml": no such variable} {TCL LOOKUP VARNAME xml}}
+#>>>
+test with-0.4 {var isn't a scalar} -constraints tdom -body { #<<<
+	package require tdom
+	type::define with-0.3 {
+		create	{apply {val {
+			dom parse $val
+		}}}
+		dup		{apply {doc {
+			dom parse [[$doc documentElement] asXML]
+		}}}
+		free	{apply {doc {
+			$doc delete
+		}}}
+		string	{apply {doc {
+			$doc asXML
+		}}}
+	}
+	array set xml {}
+	list [catch {type::with xml with-0.3 {}} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o xml
+} -result {1 {can't read "xml": variable is array} {TCL READ VARNAME}}
+#>>>
+test with-1.1 {with, unshared} -constraints tdom -setup { #<<<
+	package require tdom
+	type::define xml-with-1.1 {
+		create	{apply {val {
+			dom parse $val
+		}}}
+		string	{apply {doc {
+			$doc asXML
+		}}}
+		dup		{apply {doc {
+			dom parse [$doc asXML]
+		}}}
+		free	{apply {doc {
+			$doc delete
+		}}}
+	}
+
+	# Convoluted approach to construct $xml is to arrive at an unshared
+	# value in the variable
+	set xml	{ <foo t="1.1"><bar>Bar text</bar>}
+	set xml	[string trim "$xml<baz>Baz text</baz></foo>"]
+	string length $xml
+} -body {
+	type::with xml xml-with-1.1 {
+		[$xml documentElement] setAttribute modified with-1.1
+	}
+	set xml
+} -cleanup {
+	unset -nocomplain xml
+} -result {<foo t="1.1" modified="with-1.1">
+    <bar>Bar text</bar>
+    <baz>Baz text</baz>
+</foo>
+}
+#>>>
+test with-2.1 {with, shared} -constraints tdom -setup { #<<<
+	package require tdom
+	type::define xml-with-2.1 {
+		create	{apply {val {
+			dom parse $val
+		}}}
+		string	{apply {doc {
+			$doc asXML
+		}}}
+		dup		{apply {doc {
+			dom parse [$doc asXML]
+		}}}
+		free	{apply {doc {
+			$doc delete
+		}}}
+	}
+
+	set xml {<foo t="2.1"><bar>Bar text</bar><baz>Baz text</baz></foo>}
+} -body {
+	set xml2	$xml
+	type::with xml2 xml-with-2.1 {
+		[$xml2 documentElement] setAttribute modified with-2.1
+	}
+	list $xml $xml2
+} -cleanup {
+	unset -nocomplain xml xml2
+} -result [list \
+	{<foo t="2.1"><bar>Bar text</bar><baz>Baz text</baz></foo>} \
+	{<foo t="2.1" modified="with-2.1">
+    <bar>Bar text</bar>
+    <baz>Baz text</baz>
+</foo>
+}]
+#>>>
+
+# TODO: syntax when create takes extra args
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
+

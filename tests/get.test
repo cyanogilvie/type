@@ -1,0 +1,196 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require type
+
+test get-0.1 {too few args} -body { #<<<
+	list [catch {type::get} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::get type value"} {TCL WRONGARGS}}
+#>>>
+test get-0.2 {too few args} -body { #<<<
+	list [catch {type::get get-0.2} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::get type value"} {TCL WRONGARGS}}
+#>>>
+test get-0.3 {too many args} -body { #<<<
+	list [catch {type::get get-0.3 foo bar} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type::get type value"} {TCL WRONGARGS}}
+#>>>
+test get-0.4 {type is not defined} -body { #<<<
+	list [catch {type::get get-0.4 {}} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {Type "get-0.4" is not defined} NONE}
+#>>>
+test get-1.1 {define a type, get it} -body { #<<<
+	type::define get-1.1 {
+		create	{apply {
+			val {format {get-1.1: %s} $val}
+		}}
+	}
+	type::get get-1.1 "hello, type"
+} -result {get-1.1: hello, type}
+#>>>
+test get-2.1 {create takes args, too few given} -body { #<<<
+	list [catch {
+		type::define get-2.1 {
+			create	{apply {
+				{val a} {format {get-2.1: %s} $val}
+			}}
+		}
+		type::get get-2.1 "hello, type"
+	} r o] $r [dict get $o -errorcode]
+} -result {1 {wrong # args: should be "apply lambdaExpr val a"} {TCL WRONGARGS}}
+#>>>
+test get-2.2 {create takes args, too many given} -body { #<<<
+	list [catch {
+		type::define get-2.2 {
+			create	{apply {
+				{val a} {format {get-2.2: %s} $val}
+			}}
+		}
+		type::get {get-2.2 a_val b_val} "hello, type"
+	} r o] $r [dict get $o -errorcode]
+} -result {1 {type must be a list of one or two elements: {typename ?context?}, got 3 elements: get-2.2 a_val b_val} NONE}
+#>>>
+test get-2.3 {create takes args} -body { #<<<
+	type::define get-2.3 {
+		create	{apply {
+			{val a} {format {get-2.3: %s/%s} $val $a}
+		}}
+	}
+	type::get {get-2.3 a_val} "hello, type"
+} -result {get-2.3: hello, type/a_val}
+#>>>
+test get-2.4 {create no args} -body { #<<<
+	type::define get-2.4 {
+		create	{apply {
+			val {format {get-2.4: %s} $val}
+		}}
+	}
+	type::get get-2.4 "hello, type"
+} -result {get-2.4: hello, type}
+#>>>
+test get-3.1 {free} -body { #<<<
+	set res	{}
+	type::define get-3.1 {
+		create	{apply {val    {set ::cx "related to $val"; format {get-3.1: %s} $val}}}
+		free	{apply {intrep {unset -nocomplain ::cx}}}
+	}
+	lappend res	[info exists ::cx]
+	set val	[string trim " \u306fval-3.1"]
+	append val x
+	lappend res [type::get get-3.1 $val]
+	lappend res	[info exists ::cx]
+	unset -nocomplain val			;# Last ref to val, free should be called
+	lappend ::res	[info exists ::cx]
+} -cleanup {
+	unset -nocomplain ::cx ::res val intrep
+} -result {0 {get-3.1: はval-3.1x} 1 0}
+#>>>
+test get-4.1 {type context arg - emulate Tcl_GetIndexFromObj with unique prefix matching} -setup { #<<<
+	type::define get-4.1 {
+		create {apply {{val table} {
+			set preflen	[string length $val]
+			if {$preflen == 0} return
+			set i	-1
+			lmap e $table {
+				incr i
+				if {[string range $e 0 $preflen-1] ne $val} continue
+				set i
+			}
+		}}}
+	}
+
+	proc getindex {str table msg} {
+		set matches	[type::get [list get-4.1 $table] $str]
+		switch -- [llength $matches] {
+			1 {lindex $matches 0}
+			default {
+				throw [list TCL LOOKUP INDEX $msg $str] "bad $msg \"$str\": must be [switch [llength $table] {
+					1 {lindex $table 0}
+					2 {join $table { or }}
+					default {
+						string cat [join [lrange $table 0 end-1] {, }] ", or [lindex $table end]"
+					}
+				}]"
+			}
+		}
+	}
+
+	set subcommands {
+		args
+		body
+		class
+		cmdcount
+		commands
+		complete
+		coroutine
+		default
+		errorstack
+		exists
+		frame
+		functions
+		globals
+		hostname
+		level
+		library
+		loaded
+		locals
+		nameofexecutable
+		object
+		patchlevel
+		procs
+		script
+		sharedlibextension
+		tclversion
+		vars
+	}
+
+	set switches {
+		-exact
+		-glob
+		-regexp
+		-sorted
+		-all
+		-inline
+		-not
+		-start
+		-ascii
+		-dictionary
+		-integer
+		-nocase
+		-real
+		-decreasing
+		-increasing
+		-bisect
+		-index
+		-subindices
+	}
+} -body {
+	set res	{}
+	set c	host
+	lappend res	[getindex $c $subcommands subcommand]
+	lappend res	[catch {getindex $c $switches switch} r o]	;# Test that the intrep validity is conditional on the type context
+	lappend res $r
+	lappend res [if {[dict exists $o -errorcode]} {dict get $o -errorcode}]
+} -cleanup {
+	unset -nocomplain res subcommands switches c r o
+	rename getindex {}
+} -result {13 1 {bad switch "host": must be -exact, -glob, -regexp, -sorted, -all, -inline, -not, -start, -ascii, -dictionary, -integer, -nocase, -real, -decreasing, -increasing, -bisect, -index, or -subindices} {TCL LOOKUP INDEX switch host}}
+#>>>
+
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
+

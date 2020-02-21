@@ -1,0 +1,27 @@
+if {"bench" ni [info commands bench]} {
+	package require bench
+	namespace import bench::*
+}
+
+package require type
+
+proc main {} {
+	bench sha1-1.1 {Compare cached sha1 representations vs generating from scratch} -batch auto -setup { #<<<
+		package require sha1
+		set str		"This is some sample text"
+		type::define sha1-1.1 {
+			create sha1::sha1
+		}
+	} -compare {
+		generate        { sha1::sha1 $str }
+		intrep_direct   { type::get sha1-1.1 $str }
+		intrep_ensemble { type get sha1-1.1 $str }
+	} -cleanup {
+		unset -nocomplain str
+	} -result a57f2390963f20309a7616f65ec17950564d7c1a
+	#>>>
+}
+
+main
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4

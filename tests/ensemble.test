@@ -1,0 +1,38 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require type
+
+test ensemble-0.1 {too few args} -body { #<<<
+	list [catch {type} r o] $r [dict get $o -errorcode]
+} -cleanup {
+	unset -nocomplain r o
+} -result {1 {wrong # args: should be "type subcommand ?arg ...?"} {TCL WRONGARGS}}
+#>>>
+test ensemble-1.1 {Access using ensemble} -body { #<<<
+	type define ensemble-1.1 {
+		create {apply {
+			val {format {ensemble-1.1: %s} $val}
+		}}
+	}
+
+	set res	{}
+	set v	"hello, ensemble"
+	lappend res [type get ensemble-1.1 $v]
+
+	type with v ensemble-1.1 {
+		lappend res $v
+	}
+} -cleanup {
+	unset -nocomplain res v
+} -result {{ensemble-1.1: hello, ensemble} {ensemble-1.1: hello, ensemble}}
+#>>>
+
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
