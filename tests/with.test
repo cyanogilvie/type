@@ -154,6 +154,114 @@ test with-2.1 {with, shared} -constraints tdom -setup { #<<<
 </foo>
 }]
 #>>>
+test with-3.1 {Preserve interp result from type::with} -setup { #<<<
+	package require tdom
+	type::define xml-with-3.1 {
+		create	{apply {val {
+			[dom parse $val] documentElement
+		}}}
+		string	{apply {root {
+			$root asXML
+		}}}
+		dup		{apply {root {
+			dom parse [$root asXML]
+		}}}
+		free	{apply {root {
+			[$root ownerDocument] delete
+		}}}
+	}
+
+	set xml {<foo t="3.1"><bar>Bar text</bar><baz>Baz text</baz></foo>}
+} -body {
+	type::with xml xml-with-3.1 {
+		return -level 0 inner
+	}
+} -cleanup {
+	unset -nocomplain xml
+} -result inner
+#>>>
+test with-3.2 {Preserve interp result from type::with, error thrown} -setup { #<<<
+	package require tdom
+	type::define xml-with-3.2 {
+		create	{apply {val {
+			[dom parse $val] documentElement
+		}}}
+		string	{apply {root {
+			$root asXML
+		}}}
+		dup		{apply {root {
+			dom parse [$root asXML]
+		}}}
+		free	{apply {root {
+			[$root ownerDocument] delete
+		}}}
+	}
+
+	set xml {<foo t="3.2"><bar>Bar text</bar><baz>Baz text</baz></foo>}
+} -body {
+	type::with xml xml-with-3.2 {
+		throw {foo bar} baz
+	}
+} -cleanup {
+	unset -nocomplain xml
+} -returnCodes error -result baz -errorCode {foo bar}
+#>>>
+test with-3.3 {Preserve interp result from type::with, error thrown while switching context var back} -setup { #<<<
+	package require tdom
+	type::define xml-with-3.3 {
+		create	{apply {val {
+			[dom parse $val] documentElement
+		}}}
+		string	{apply {root {
+			$root asXML
+		}}}
+		dup		{apply {root {
+			dom parse [$root asXML]
+		}}}
+		free	{apply {root {
+			[$root ownerDocument] delete
+		}}}
+	}
+
+	set xml {<foo t="3.3"><bar>Bar text</bar><baz>Baz text</baz></foo>}
+} -body {
+	type::with xml xml-with-3.3 {
+		unset xml
+		array set xml {foo bar}
+		return -level 0 inner
+	}
+} -cleanup {
+	unset -nocomplain xml
+} -returnCodes error -result {can't set "xml": variable is array} -errorCode {TCL WRITE VARNAME}
+#>>>
+test with-3.4 {Preserve interp result from type::with, error thrown while switching context var back while already unwinding from an error} -setup { #<<<
+	package require tdom
+	type::define xml-with-3.4 {
+		create	{apply {val {
+			[dom parse $val] documentElement
+		}}}
+		string	{apply {root {
+			$root asXML
+		}}}
+		dup		{apply {root {
+			dom parse [$root asXML]
+		}}}
+		free	{apply {root {
+			[$root ownerDocument] delete
+		}}}
+	}
+
+	set xml {<foo t="3.4"><bar>Bar text</bar><baz>Baz text</baz></foo>}
+} -body {
+	type::with xml xml-with-3.4 {
+		unset xml
+		array set xml {foo bar}
+		throw {foo 3.4} "Error in body"
+	}
+} -cleanup {
+	unset -nocomplain xml
+} -returnCodes error -result {Error in body} -errorCode {foo 3.4}
+#>>>
 
 # TODO: syntax when create takes extra args
 

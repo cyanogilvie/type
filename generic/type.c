@@ -66,8 +66,10 @@ static void free_int_rep(Tcl_Obj* obj) //{{{
 	struct objtype_ex*	type = (struct objtype_ex*)obj->typePtr;
 	Tcl_ObjIntRep*	ir = Tcl_FetchIntRep(obj, (Tcl_ObjType*)type);
 	Tcl_Obj*		intrep = ir->twoPtrValue.ptr1;
+	Tcl_InterpState	state;
 
 	if (intrep) {
+		state = Tcl_SaveInterpState(type->interp, 0);
 		if (type->free_int_rep) {
 			Tcl_Obj*	cmd = NULL;
 			int			code = TCL_OK;
@@ -82,10 +84,10 @@ static void free_int_rep(Tcl_Obj* obj) //{{{
 						Tcl_GetString(type->typename),
 						Tcl_GetString(type->free_int_rep),
 						Tcl_GetString(Tcl_GetObjResult(type->interp)));
-			Tcl_ResetResult(type->interp);
 		}
 		release_tclobj(&intrep);
 		ir->twoPtrValue.ptr1 = NULL;
+		Tcl_RestoreInterpState(type->interp, state);
 	}
 }
 
@@ -110,7 +112,9 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 		if (type->dup_int_rep) {
 			Tcl_Obj*	cmd = NULL;
 			int			code = TCL_OK;
+			Tcl_InterpState	state;
 
+			state = Tcl_SaveInterpState(type->interp, 0);
 			replace_tclobj(&cmd, Tcl_DuplicateObj(type->dup_int_rep));
 			code = Tcl_ListObjAppendElement(type->interp, cmd, intrep);
 			if (code == TCL_OK)
@@ -127,7 +131,7 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 			} else {
 				// TODO: what?
 			}
-			Tcl_ResetResult(type->interp);
+			Tcl_RestoreInterpState(type->interp, state);
 		}
 	}
 	replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr1, intrep);
@@ -151,8 +155,9 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 
 	if (intrep) {
 		if (type->update_string_rep) {
-			Tcl_Obj*	cmd = NULL;
-			int			code = TCL_OK;
+			Tcl_Obj*		cmd = NULL;
+			int				code = TCL_OK;
+			Tcl_InterpState	state = Tcl_SaveInterpState(type->interp, 0);
 
 			replace_tclobj(&cmd, Tcl_DuplicateObj(type->update_string_rep));
 			code = Tcl_ListObjAppendElement(type->interp, cmd, intrep);
@@ -165,14 +170,16 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 						Tcl_GetString(type->update_string_rep),
 						Tcl_GetString(Tcl_GetObjResult(type->interp)));
 
-			Tcl_Obj*	res = Tcl_GetObjResult(type->interp);
-			const char*	newstring = NULL;
-			int			newstring_len;
+			{
+				Tcl_Obj*	res = Tcl_GetObjResult(type->interp);
+				const char*	newstring = NULL;
+				int			newstring_len;
 
-			newstring = Tcl_GetStringFromObj(res, &newstring_len);
+				newstring = Tcl_GetStringFromObj(res, &newstring_len);
 
-			Tcl_InitStringRep(obj, newstring, newstring_len);
-			Tcl_ResetResult(type->interp);
+				Tcl_InitStringRep(obj, newstring, newstring_len);
+			}
+			Tcl_RestoreInterpState(type->interp, state);
 		} else {
 			// TODO: what?
 			Tcl_Panic("regobjtype(%s) update_string_rep not defined", Tcl_GetString(type->typename));
@@ -404,6 +411,8 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 
 	ir = Tcl_FetchIntRep(val, basetype);
 	if (ir == NULL || (tc > 1 && ir->twoPtrValue.ptr2 != tv[1])) {
+		Tcl_InterpState	state = NULL;
+
 		Tcl_ObjIntRep newIr = {.twoPtrValue.ptr1 = NULL, .twoPtrValue.ptr2 = NULL};
 
 		replace_tclobj(&cmd, Tcl_DuplicateObj(handlers->create));
@@ -412,6 +421,9 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 		if (tc > 1) {
 			code = Tcl_ListObjAppendElement(interp, cmd, tv[1]);
 			if (code == TCL_ERROR) goto finally;
+		}
+		if (handlers->interp != interp) {
+			state = Tcl_SaveInterpState(handlers->interp, 0);
 		}
 		code = Tcl_EvalObjEx(handlers->interp, cmd, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
 		release_tclobj(&cmd);
@@ -423,7 +435,8 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 		}
 		if (handlers->interp != interp) {
 			Tcl_SetObjResult(interp, Tcl_GetObjResult(handlers->interp));
-			Tcl_ResetResult(handlers->interp);
+			// TODO: migrate the rest of the result state (maybe Tcl_SaveInterpState(handlers->interp), Tcl_RestoreInterpState(interp) ?
+			Tcl_RestoreInterpState(handlers->interp, state);
 		}
 	}
 
@@ -476,6 +489,7 @@ static int with(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const o
 	struct pidata*		l = cdata;
 	Tcl_Obj*			val = NULL;
 	Tcl_Obj*			loanval = NULL;
+	Tcl_InterpState		saved_state;
 
 	if (objc != 4) {
 		Tcl_WrongNumArgs(interp, 1, objv, "varname type script");
@@ -516,11 +530,21 @@ static int with(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const o
 	}
 
 	code = Tcl_EvalObjEx(interp, objv[3], 0);
+	saved_state = Tcl_SaveInterpState(interp, code);
 
 	if (NULL == Tcl_ObjSetVar2(interp, objv[1], NULL, val, TCL_LEAVE_ERR_MSG)) {
-		code = TCL_ERROR;
+		if (code == TCL_ERROR) {
+			/* This second error occured while unwinding from an original
+			 * error, report that rather */
+			code = Tcl_RestoreInterpState(interp, saved_state);
+		} else {
+			Tcl_DiscardInterpState(saved_state);
+			code = TCL_ERROR;
+		}
 		goto finally;
 	}
+
+	code = Tcl_RestoreInterpState(interp, saved_state);
 
 finally:
 	release_tclobj(&val);
