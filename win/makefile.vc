@@ -1,6 +1,6 @@
 #------------------------------------------------------------- -*- makefile -*-
 #
-# Sample makefile for building Tcl extensions.
+# Makefile for type using nmake and Visual C++
 #
 # Basic build, test and install
 #   nmake /s /nologo /f makefile.vc INSTALLDIR=c:\path\to\tcl
@@ -17,7 +17,7 @@
 #------------------------------------------------------------------------------
 
 # The name of the package
-PROJECT = sample
+PROJECT = type
 
 !include "rules-ext.vc"
 
@@ -26,19 +26,21 @@ PROJECT = sample
 # hence it is under that condition. TMP_DIR is the output directory
 # defined by rules for object files.
 PRJ_OBJS = \
-	$(TMP_DIR)\tclsample.obj \
-	$(TMP_DIR)\sample.obj
+	$(TMP_DIR)\type.obj \
+	$(TMP_DIR)\names.obj
 
 # Define any additional compiler flags that might be required for the project
 PRJ_DEFINES = -D_CRT_SECURE_NO_DEPRECATE
+#if $(TCL_MAJOR_VERSION) == 8 && $(TCL_MINOR_VERSION) < 7
+PRJ_DEFINES = -DTIP445_SHIM=1
+#endif
 
 # Define the standard targets
 !include "$(_RULESDIR)\targets.vc"
 
 # We must define a pkgindex target that will create a pkgIndex.tcl
-# file in the $(OUT_DIR) directory. We can just redirect to the
-# default-pkgindex target for our sample extension.
-pkgindex: default-pkgindex
+# file in the $(OUT_DIR) directory. We can just reuse the TEA one.
+pkgindex: default-pkgindex-tea
 
 # The default install target only installs binaries and scripts so add
 # an additional target for our documentation. Note this *adds* a target

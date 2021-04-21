@@ -93,7 +93,7 @@ test get-3.1 {free} -body { #<<<
 	lappend ::res	[info exists ::cx]
 } -cleanup {
 	unset -nocomplain ::cx ::res val intrep
-} -result {0 {get-3.1: はval-3.1x} 1 0}
+} -result [list 0 "get-3.1: \u306fval-3.1x" 1 0]
 #>>>
 test get-4.1 {type context arg - emulate Tcl_GetIndexFromObj with unique prefix matching} -setup { #<<<
 	type::define get-4.1 {
