@@ -64,9 +64,9 @@ static void free_int_rep(Tcl_Obj* obj) //{{{
 	 * one (Hydra)
 	 */
 	struct objtype_ex*	type = (struct objtype_ex*)obj->typePtr;
-	Tcl_ObjIntRep*	ir = Tcl_FetchIntRep(obj, (Tcl_ObjType*)type);
-	Tcl_Obj*		intrep = ir->twoPtrValue.ptr1;
-	Tcl_InterpState	state;
+	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(obj, (Tcl_ObjType*)type);
+	Tcl_Obj*			intrep = ir->twoPtrValue.ptr1;
+	Tcl_InterpState		state;
 
 	if (intrep) {
 		state = Tcl_SaveInterpState(type->interp, 0);
@@ -100,9 +100,9 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 	 * one (Hydra)
 	 */
 	struct objtype_ex*	type = (struct objtype_ex*)src->typePtr;
-	Tcl_ObjIntRep*	ir = Tcl_FetchIntRep(src, (Tcl_ObjType*)type);
-	Tcl_Obj*		intrep = NULL;
-	Tcl_ObjIntRep	newIr;
+	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(src, (Tcl_ObjType*)type);
+	Tcl_Obj*			intrep = NULL;
+	Tcl_ObjInternalRep	newIr;
 
 	memset(&newIr, 0, sizeof(newIr));
 
@@ -136,7 +136,7 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 	}
 	replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr1, intrep);
 
-	Tcl_StoreIntRep(dup, (Tcl_ObjType*)type, &newIr);
+	Tcl_StoreInternalRep(dup, (Tcl_ObjType*)type, &newIr);
 }
 
 //}}}
@@ -148,8 +148,8 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 	 * one (Hydra)
 	 */
 	struct objtype_ex*	type = (struct objtype_ex*)obj->typePtr;
-	Tcl_ObjIntRep*	ir = Tcl_FetchIntRep(obj, (Tcl_ObjType*)type);
-	Tcl_Obj*		intrep = NULL;
+	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(obj, (Tcl_ObjType*)type);
+	Tcl_Obj*			intrep = NULL;
 
 	replace_tclobj(&intrep, ir->twoPtrValue.ptr1);
 
@@ -376,16 +376,16 @@ finally:
 }
 
 //}}}
-static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj* val, Tcl_Obj* type, Tcl_ObjIntRep** irout) //{{{
+static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj* val, Tcl_Obj* type, Tcl_ObjInternalRep** irout) //{{{
 {
-	int					code = TCL_OK;
-	Tcl_ObjIntRep*		ir = NULL;
-	Tcl_HashEntry*		he = NULL;
-	struct objtype_ex*	handlers;
-	Tcl_ObjType*		basetype = NULL;
-	Tcl_Obj*			cmd = NULL;
-	Tcl_Obj**			tv = NULL;
-	int					tc;
+	int						code = TCL_OK;
+	Tcl_ObjInternalRep*		ir = NULL;
+	Tcl_HashEntry*			he = NULL;
+	struct objtype_ex*		handlers;
+	Tcl_ObjType*			basetype = NULL;
+	Tcl_Obj*				cmd = NULL;
+	Tcl_Obj**				tv = NULL;
+	int						tc;
 
 	code = Tcl_ListObjGetElements(interp, type, &tc, &tv);
 	if (code != TCL_OK) goto finally;
@@ -409,11 +409,11 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 	handlers = Tcl_GetHashValue(he);
 	basetype = &handlers->base;
 
-	ir = Tcl_FetchIntRep(val, basetype);
+	ir = Tcl_FetchInternalRep(val, basetype);
 	if (ir == NULL || (tc > 1 && ir->twoPtrValue.ptr2 != tv[1])) {
 		Tcl_InterpState	state = NULL;
 
-		Tcl_ObjIntRep newIr = {.twoPtrValue.ptr1 = NULL, .twoPtrValue.ptr2 = NULL};
+		Tcl_ObjInternalRep newIr = {.twoPtrValue.ptr1 = NULL, .twoPtrValue.ptr2 = NULL};
 
 		replace_tclobj(&cmd, Tcl_DuplicateObj(handlers->create));
 		code = Tcl_ListObjAppendElement(interp, cmd, val);
@@ -430,8 +430,8 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 		if (code == TCL_OK) {
 			replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr1, Tcl_GetObjResult(handlers->interp));
 			if (tc > 1) replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr2, tv[1]);
-			Tcl_StoreIntRep(val, (Tcl_ObjType*)handlers, &newIr);
-			ir = Tcl_FetchIntRep(val, basetype);
+			Tcl_StoreInternalRep(val, (Tcl_ObjType*)handlers, &newIr);
+			ir = Tcl_FetchInternalRep(val, basetype);
 		}
 		if (handlers->interp != interp) {
 			Tcl_SetObjResult(interp, Tcl_GetObjResult(handlers->interp));
@@ -465,7 +465,7 @@ finally:
 //}}}
 static int get(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const objv[]) //{{{
 {
-	Tcl_ObjIntRep*		ir = NULL;
+	Tcl_ObjInternalRep*	ir = NULL;
 	struct pidata*		l = cdata;
 
 	if (objc != 3) {
@@ -485,7 +485,7 @@ static int get(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const ob
 static int with(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const objv[]) //{{{
 {
 	int					code = TCL_OK;
-	Tcl_ObjIntRep*		ir = NULL;
+	Tcl_ObjInternalRep*	ir = NULL;
 	struct pidata*		l = cdata;
 	Tcl_Obj*			val = NULL;
 	Tcl_Obj*			loanval = NULL;
