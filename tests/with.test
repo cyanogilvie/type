@@ -3,7 +3,7 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
-package require type
+::tcltest::loadTestedCommands
 
 if {"tdom" in [package names]} {
 	tcltest::testConstraint tdom 1
@@ -154,7 +154,7 @@ test with-2.1 {with, shared} -constraints tdom -setup { #<<<
 </foo>
 }]
 #>>>
-test with-3.1 {Preserve interp result from type::with} -setup { #<<<
+test with-3.1 {Preserve interp result from type::with} -constraints tdom -setup { #<<<
 	package require tdom
 	type::define xml-with-3.1 {
 		create	{apply {val {
@@ -180,7 +180,7 @@ test with-3.1 {Preserve interp result from type::with} -setup { #<<<
 	unset -nocomplain xml
 } -result inner
 #>>>
-test with-3.2 {Preserve interp result from type::with, error thrown} -setup { #<<<
+test with-3.2 {Preserve interp result from type::with, error thrown} -constraints tdom -setup { #<<<
 	package require tdom
 	type::define xml-with-3.2 {
 		create	{apply {val {
@@ -206,7 +206,7 @@ test with-3.2 {Preserve interp result from type::with, error thrown} -setup { #<
 	unset -nocomplain xml
 } -returnCodes error -result baz -errorCode {foo bar}
 #>>>
-test with-3.3 {Preserve interp result from type::with, error thrown while switching context var back} -setup { #<<<
+test with-3.3 {Preserve interp result from type::with, error thrown while switching context var back} -constraints tdom -setup { #<<<
 	package require tdom
 	type::define xml-with-3.3 {
 		create	{apply {val {
@@ -234,7 +234,7 @@ test with-3.3 {Preserve interp result from type::with, error thrown while switch
 	unset -nocomplain xml
 } -returnCodes error -result {can't set "xml": variable is array} -errorCode {TCL WRITE VARNAME}
 #>>>
-test with-3.4 {Preserve interp result from type::with, error thrown while switching context var back while already unwinding from an error} -setup { #<<<
+test with-3.4 {Preserve interp result from type::with, error thrown while switching context var back while already unwinding from an error} -constraints tdom -setup { #<<<
 	package require tdom
 	type::define xml-with-3.4 {
 		create	{apply {val {

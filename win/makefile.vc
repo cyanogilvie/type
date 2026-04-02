@@ -31,9 +31,11 @@ PRJ_OBJS = \
 
 # Define any additional compiler flags that might be required for the project
 PRJ_DEFINES = -D_CRT_SECURE_NO_DEPRECATE
-#if $(TCL_MAJOR_VERSION) == 8 && $(TCL_MINOR_VERSION) < 7
-PRJ_DEFINES = -DTIP445_SHIM=1
-#endif
+!if $(TCL_MAJOR_VERSION) == 8 && $(TCL_MINOR_VERSION) < 7
+PRJ_DEFINES = $(PRJ_DEFINES) -DTIP445_SHIM=1
+!else
+PRJ_DEFINES = $(PRJ_DEFINES) -DTIP445_SHIM=0
+!endif
 
 # Define the standard targets
 !include "$(_RULESDIR)\targets.vc"

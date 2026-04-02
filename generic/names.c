@@ -1,3 +1,5 @@
+typedef int make_iso_compilers_happy;
+
 #if DEBUG
 #include <tcl.h>
 #include "names.h"
@@ -309,7 +311,7 @@ static const char* nouns[] = {
 };
 
 
-TCL_DECLARE_MUTEX(things_mutex);
+TCL_DECLARE_MUTEX(things_mutex)
 static int				hash_tables_initialized = 0;
 static int				maxlen_adjective = 0;
 static int				maxlen_noun = 0;

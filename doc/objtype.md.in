@@ -1,18 +1,18 @@
-% type(3) 1.0 | Expose custom Tcl_ObjTypes to Tcl script
+% @PACKAGE_NAME@(3) @PACKAGE_VERSION@ | Expose custom Tcl_ObjTypes to Tcl script
 % Cyan Ogilvie
-% 1.0
+% @PACKAGE_VERSION@
 
 # NAME
 
-type - Allow Tcl script to create custom Tcl_ObjTypes
+@PACKAGE_NAME@ - Allow Tcl script to create custom Tcl_ObjTypes
 
 # SYNOPSIS
 
-**package require type** ?1.0?
+**package require @PACKAGE_NAME@** ?@PACKAGE_VERSION@?
 
-**type::define** *typename* *handlers*  
-**type::get** *type* *value*  
-**type::with** *varname* *type* *script*  
+**type::define** *typename* *handlers*\
+**type::get** *type* *value*\
+**type::with** *varname* *type* *script*
 
 # DESCRIPTION
 

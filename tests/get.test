@@ -3,7 +3,7 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
-package require type
+::tcltest::loadTestedCommands
 
 test get-0.1 {too few args} -body { #<<<
 	list [catch {type::get} r o] $r [dict get $o -errorcode]
@@ -185,6 +185,56 @@ test get-4.1 {type context arg - emulate Tcl_GetIndexFromObj with unique prefix 
 	unset -nocomplain res subcommands switches c r o
 	rename getindex {}
 } -result {13 1 {bad switch "host": must be -exact, -glob, -regexp, -sorted, -all, -inline, -not, -start, -ascii, -dictionary, -integer, -nocase, -real, -decreasing, -increasing, -bisect, -index, or -subindices} {TCL LOOKUP INDEX switch host}}
+#>>>
+test get-5.1 {context freed on value cleanup} -body { #<<<
+	set res	{}
+	type::define get-5.1 {
+		create	{apply {{val ctx} {set ::cx5 "ctx=$ctx for $val"; format {get-5.1: %s/%s} $val $ctx}}}
+		free	{apply {intrep {unset -nocomplain ::cx5}}}
+	}
+	lappend res	[info exists ::cx5]
+	set val	[string trim " val-5.1"]
+	append val x
+	lappend res [type::get {get-5.1 myctx} $val]
+	lappend res	[info exists ::cx5]
+	unset -nocomplain val
+	lappend ::res	[info exists ::cx5]
+} -cleanup {
+	unset -nocomplain ::cx5 ::res val
+} -result {0 {get-5.1: val-5.1x/myctx} 1 0}
+#>>>
+test get-5.2 {dup preserves context} -body { #<<<
+	type::define get-5.2 {
+		create	{apply {{val ctx} {list get-5.2 $val $ctx}}}
+		string	{apply {ir {lindex $ir 1}}}
+	}
+	set val	[string trim " val-5.2"]
+	append val x
+	type::get {get-5.2 myctx} $val
+
+	# Force a dup by sharing and mutating
+	set val2 $val
+	append val ""
+
+	# Both should resolve with the same context
+	list [type::get {get-5.2 myctx} $val] [type::get {get-5.2 myctx} $val2]
+} -cleanup {
+	unset -nocomplain val val2
+} -result {{get-5.2 val-5.2x myctx} {get-5.2 val-5.2x myctx}}
+#>>>
+test get-5.3 {context invalidation on context change} -body { #<<<
+	type::define get-5.3 {
+		create	{apply {{val ctx} {format {%s/%s} $val $ctx}}}
+		string	{apply {ir {lindex [split $ir /] 0}}}
+	}
+	set val	[string trim " val-5.3"]
+	append val x
+	set r1 [type::get {get-5.3 ctx_a} $val]
+	set r2 [type::get {get-5.3 ctx_b} $val]
+	list $r1 $r2
+} -cleanup {
+	unset -nocomplain val r1 r2
+} -result {val-5.3x/ctx_a val-5.3x/ctx_b}
 #>>>
 
 

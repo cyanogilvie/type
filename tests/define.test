@@ -3,7 +3,7 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
-package require type
+::tcltest::loadTestedCommands
 
 test define-0.1 {too few args} -body { #<<<
 	list [catch {type::define} r o] $r [dict get $o -errorcode]

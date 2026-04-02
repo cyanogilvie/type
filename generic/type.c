@@ -1,4 +1,15 @@
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <tcl.h>
+
+/* Tcl_Size compat for Tcl 8 (autotools builds without config.h) */
+#ifndef TCL_SIZE_MAX
+typedef int Tcl_Size;
+# define TCL_SIZE_MODIFIER ""
+#endif
+
 #include <string.h>
 #include "tclstuff.h"
 #include "tip445.h"
@@ -18,6 +29,18 @@
 #undef TCL_STORAGE_CLASS
 #define TCL_STORAGE_CLASS DLLEXPORT
 #endif /* BUILD_objtype */
+
+struct obj_tracker {
+	struct obj_tracker*	prev;
+	struct obj_tracker*	next;
+	Tcl_Obj*			obj;
+};
+
+struct type_intrep {
+	struct obj_tracker	tracker;
+	Tcl_Obj*			intrep;		/* The create handler result, NULL-initialized */
+	Tcl_Obj*			context;	/* From 2-element type spec, or NULL */
+};
 
 struct objtype_ex {
 	Tcl_ObjType	base;
@@ -52,66 +75,69 @@ static const char* lit_strings[] = {
 };
 
 struct pidata {
-	Tcl_HashTable	types;
-	Tcl_Obj*		lit[LIT_END];
+	Tcl_HashTable		types;
+	Tcl_Obj*			lit[LIT_END];
+	struct obj_tracker	tracker_head;
+	struct obj_tracker	tracker_tail;
 };
 
 static void free_int_rep(Tcl_Obj* obj) //{{{
 {
-	/*
-	 * Violates TIP 445, at least in spirit.  Need a way to iterate through all
-	 * obj's types to find those that we manage, in case there are more than
-	 * one (Hydra)
-	 */
 	struct objtype_ex*	type = (struct objtype_ex*)obj->typePtr;
 	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(obj, (Tcl_ObjType*)type);
-	Tcl_Obj*			intrep = ir->twoPtrValue.ptr1;
-	Tcl_InterpState		state;
+	struct type_intrep*	ti = ir->twoPtrValue.ptr1;
 
-	if (intrep) {
-		state = Tcl_SaveInterpState(type->interp, 0);
-		if (type->free_int_rep) {
-			Tcl_Obj*	cmd = NULL;
-			int			code = TCL_OK;
+	if (ti) {
+		/* Unlink from tracking list */
+		ti->tracker.next->prev = ti->tracker.prev;
+		ti->tracker.prev->next = ti->tracker.next;
 
-			replace_tclobj(&cmd, Tcl_DuplicateObj(type->free_int_rep));
-			code = Tcl_ListObjAppendElement(type->interp, cmd, intrep);
-			if (code == TCL_OK)
-				code = Tcl_EvalObjEx(type->interp, cmd, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
-			release_tclobj(&cmd);
-			if (code != TCL_OK)
-				Tcl_Panic("type(%s) free handler \"%s\" threw error: %s",
-						Tcl_GetString(type->typename),
-						Tcl_GetString(type->free_int_rep),
-						Tcl_GetString(Tcl_GetObjResult(type->interp)));
+		if (ti->intrep) {
+			Tcl_InterpState	state = Tcl_SaveInterpState(type->interp, 0);
+
+			if (type->free_int_rep && !Tcl_InterpDeleted(type->interp)) {
+				Tcl_Obj*	cmd = NULL;
+				int			code = TCL_OK;
+
+				replace_tclobj(&cmd, Tcl_DuplicateObj(type->free_int_rep));
+				code = Tcl_ListObjAppendElement(type->interp, cmd, ti->intrep);
+				if (code == TCL_OK)
+					code = Tcl_EvalObjEx(type->interp, cmd, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
+				release_tclobj(&cmd);
+				if (code != TCL_OK)
+					Tcl_Panic("type(%s) free handler \"%s\" threw error: %s",
+							Tcl_GetString(type->typename),
+							Tcl_GetString(type->free_int_rep),
+							Tcl_GetString(Tcl_GetObjResult(type->interp)));
+			}
+			release_tclobj(&ti->intrep);
+			Tcl_RestoreInterpState(type->interp, state);
 		}
-		release_tclobj(&intrep);
+		release_tclobj(&ti->context);
+		ckfree(ti);
 		ir->twoPtrValue.ptr1 = NULL;
-		Tcl_RestoreInterpState(type->interp, state);
 	}
 }
 
 //}}}
 static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 {
-	/*
-	 * Violates TIP 445, at least in spirit.  Need a way to iterate through all
-	 * obj's types to find those that we manage, in case there are more than
-	 * one (Hydra)
-	 */
 	struct objtype_ex*	type = (struct objtype_ex*)src->typePtr;
 	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(src, (Tcl_ObjType*)type);
-	Tcl_Obj*			intrep = NULL;
+	struct type_intrep*	src_ti = ir->twoPtrValue.ptr1;
 	Tcl_ObjInternalRep	newIr;
 
 	memset(&newIr, 0, sizeof(newIr));
 
-	replace_tclobj(&intrep, ir->twoPtrValue.ptr1);
+	if (src_ti && src_ti->intrep) {
+		Tcl_Obj*			intrep = NULL;
+		struct type_intrep*	new_ti = NULL;
 
-	if (intrep) {
+		replace_tclobj(&intrep, src_ti->intrep);
+
 		if (type->dup_int_rep) {
-			Tcl_Obj*	cmd = NULL;
-			int			code = TCL_OK;
+			Tcl_Obj*		cmd = NULL;
+			int				code = TCL_OK;
 			Tcl_InterpState	state;
 
 			state = Tcl_SaveInterpState(type->interp, 0);
@@ -126,15 +152,27 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 						Tcl_GetString(type->dup_int_rep),
 						Tcl_GetString(Tcl_GetObjResult(type->interp)));
 
-			if (code == TCL_OK) {
-				replace_tclobj(&intrep, Tcl_GetObjResult(type->interp));
-			} else {
-				// TODO: what?
-			}
+			replace_tclobj(&intrep, Tcl_GetObjResult(type->interp));
 			Tcl_RestoreInterpState(type->interp, state);
 		}
+
+		new_ti = ckalloc(sizeof(*new_ti));
+		memset(new_ti, 0, sizeof(*new_ti));
+		replace_tclobj(&new_ti->intrep, intrep);
+		replace_tclobj(&new_ti->context, src_ti->context);
+		release_tclobj(&intrep);
+
+		/* Insert tracker as sibling, immediately after the source's node */
+		new_ti->tracker = (struct obj_tracker){
+			.next	= src_ti->tracker.next,
+			.prev	= &src_ti->tracker,
+			.obj	= dup
+		};
+		src_ti->tracker.next = &new_ti->tracker;
+		new_ti->tracker.next->prev = &new_ti->tracker;
+
+		newIr.twoPtrValue.ptr1 = new_ti;
 	}
-	replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr1, intrep);
 
 	Tcl_StoreInternalRep(dup, (Tcl_ObjType*)type, &newIr);
 }
@@ -142,25 +180,18 @@ static void dup_int_rep(Tcl_Obj* src, Tcl_Obj* dup) //{{{
 //}}}
 static void update_string_rep(Tcl_Obj* obj) //{{{
 {
-	/*
-	 * Violates TIP 445, at least in spirit.  Need a way to iterate through all
-	 * obj's types to find those that we manage, in case there are more than
-	 * one (Hydra)
-	 */
 	struct objtype_ex*	type = (struct objtype_ex*)obj->typePtr;
 	Tcl_ObjInternalRep*	ir = Tcl_FetchInternalRep(obj, (Tcl_ObjType*)type);
-	Tcl_Obj*			intrep = NULL;
+	struct type_intrep*	ti = ir->twoPtrValue.ptr1;
 
-	replace_tclobj(&intrep, ir->twoPtrValue.ptr1);
-
-	if (intrep) {
+	if (ti && ti->intrep) {
 		if (type->update_string_rep) {
 			Tcl_Obj*		cmd = NULL;
 			int				code = TCL_OK;
 			Tcl_InterpState	state = Tcl_SaveInterpState(type->interp, 0);
 
 			replace_tclobj(&cmd, Tcl_DuplicateObj(type->update_string_rep));
-			code = Tcl_ListObjAppendElement(type->interp, cmd, intrep);
+			code = Tcl_ListObjAppendElement(type->interp, cmd, ti->intrep);
 			if (code == TCL_OK)
 				code = Tcl_EvalObjEx(type->interp, cmd, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
 			release_tclobj(&cmd);
@@ -173,7 +204,7 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 			{
 				Tcl_Obj*	res = Tcl_GetObjResult(type->interp);
 				const char*	newstring = NULL;
-				int			newstring_len;
+				Tcl_Size	newstring_len;
 
 				newstring = Tcl_GetStringFromObj(res, &newstring_len);
 
@@ -181,11 +212,9 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 			}
 			Tcl_RestoreInterpState(type->interp, state);
 		} else {
-			// TODO: what?
 			Tcl_Panic("regobjtype(%s) update_string_rep not defined", Tcl_GetString(type->typename));
 		}
 	} else {
-		// TODO: what?
 		Tcl_Panic("regobjtype(%s) intrep Tcl_Obj is NULL", Tcl_GetString(type->typename));
 	}
 }
@@ -194,7 +223,7 @@ static void update_string_rep(Tcl_Obj* obj) //{{{
 static void free_handlers(struct objtype_ex* handlers) //{{{
 {
 	if (handlers->base.name) {
-		ckfree(handlers->base.name);
+		ckfree((char*)handlers->base.name);
 		handlers->base.name = NULL;
 	}
 
@@ -217,7 +246,7 @@ static int define(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const
 	struct objtype_ex*	handlers = NULL;
 	Tcl_Obj*			typename = NULL;
 	const char*			typename_str = NULL;
-	int					typename_len;
+	Tcl_Size			typename_len;
 	static const char*	handler_names[] = {
 		/*
 		 * Tempting to use lit_strings for this, but it isn't guaranteed
@@ -299,7 +328,7 @@ static int define(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const
  */
 #define CHECK_HANDLER_IS_LIST(obj) \
 		do { \
-			int oc; \
+			Tcl_Size oc; \
 			Tcl_Obj** ov; \
 			Tcl_Command cmd; \
 			code = Tcl_ListObjGetElements(interp, obj, &oc, &ov); \
@@ -350,7 +379,6 @@ donesearch:
 
 		if (handlers->create == NULL) {
 			Tcl_SetObjResult(interp, Tcl_ObjPrintf("create is required in handlers"));
-			handlers = NULL;
 			code = TCL_ERROR;
 			goto finally;
 		}
@@ -385,7 +413,7 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 	Tcl_ObjType*			basetype = NULL;
 	Tcl_Obj*				cmd = NULL;
 	Tcl_Obj**				tv = NULL;
-	int						tc;
+	Tcl_Size				tc;
 
 	code = Tcl_ListObjGetElements(interp, type, &tc, &tv);
 	if (code != TCL_OK) goto finally;
@@ -393,7 +421,7 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 	if (tc < 1 || tc > 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 					"type must be a list of one or two elements: "
-					"{typename ?context?}, got %d elements: %s",
+					"{typename ?context?}, got %" TCL_SIZE_MODIFIER "d elements: %s",
 					tc, Tcl_GetString(type)));
 		code = TCL_ERROR;
 		goto finally;
@@ -410,13 +438,13 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 	basetype = &handlers->base;
 
 	ir = Tcl_FetchInternalRep(val, basetype);
-	if (ir == NULL || (tc > 1 && ir->twoPtrValue.ptr2 != tv[1])) {
+	if (ir == NULL || (tc > 1 && ((struct type_intrep*)ir->twoPtrValue.ptr1)->context != tv[1])) {
 		Tcl_InterpState	state = NULL;
 
 		Tcl_ObjInternalRep newIr = {.twoPtrValue.ptr1 = NULL, .twoPtrValue.ptr2 = NULL};
 
 		replace_tclobj(&cmd, Tcl_DuplicateObj(handlers->create));
-		code = Tcl_ListObjAppendElement(interp, cmd, val);
+		code = Tcl_ListObjAppendElement(interp, cmd, Tcl_DuplicateObj(val));
 		if (code == TCL_ERROR) goto finally;
 		if (tc > 1) {
 			code = Tcl_ListObjAppendElement(interp, cmd, tv[1]);
@@ -428,8 +456,21 @@ static int fetch_or_create_intrep(Tcl_Interp* interp, struct pidata* l, Tcl_Obj*
 		code = Tcl_EvalObjEx(handlers->interp, cmd, TCL_EVAL_GLOBAL | TCL_EVAL_DIRECT);
 		release_tclobj(&cmd);
 		if (code == TCL_OK) {
-			replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr1, Tcl_GetObjResult(handlers->interp));
-			if (tc > 1) replace_tclobj((Tcl_Obj**)&newIr.twoPtrValue.ptr2, tv[1]);
+			struct type_intrep*	ti = ckalloc(sizeof(*ti));
+			memset(ti, 0, sizeof(*ti));
+			replace_tclobj(&ti->intrep, Tcl_GetObjResult(handlers->interp));
+			if (tc > 1) replace_tclobj(&ti->context, tv[1]);
+
+			/* Insert tracker at head of list */
+			ti->tracker = (struct obj_tracker){
+				.next	= l->tracker_head.next,
+				.prev	= &l->tracker_head,
+				.obj	= val
+			};
+			l->tracker_head.next = &ti->tracker;
+			ti->tracker.next->prev = &ti->tracker;
+
+			newIr.twoPtrValue.ptr1 = ti;
 			Tcl_StoreInternalRep(val, (Tcl_ObjType*)handlers, &newIr);
 			ir = Tcl_FetchInternalRep(val, basetype);
 		}
@@ -474,7 +515,8 @@ static int get(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const ob
 	}
 
 	if (fetch_or_create_intrep(interp, l, objv[2], objv[1], &ir) == TCL_OK) {
-		Tcl_SetObjResult(interp, ir->twoPtrValue.ptr1);
+		struct type_intrep*	ti = ir->twoPtrValue.ptr1;
+		Tcl_SetObjResult(interp, ti->intrep);
 		return TCL_OK;
 	} else {
 		return TCL_ERROR;
@@ -502,7 +544,7 @@ static int with(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const o
 		code = TCL_ERROR;
 		goto finally;
 	}
-	DBG("loanval refcount: %d\n", loanval->refCount);
+	DBG("loanval refcount: %" TCL_SIZE_MODIFIER "d\n", loanval->refCount);
 
 	/* TODO: break the interface abstraction here to handle errors thrown by
 	 * the dup callback more gracefully? */
@@ -524,7 +566,7 @@ static int with(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj *const o
 
 	Tcl_InvalidateStringRep(val);
 
-	if (NULL == Tcl_ObjSetVar2(interp, objv[1], NULL, (Tcl_Obj*)ir->twoPtrValue.ptr1, TCL_LEAVE_ERR_MSG)) {
+	if (NULL == Tcl_ObjSetVar2(interp, objv[1], NULL, ((struct type_intrep*)ir->twoPtrValue.ptr1)->intrep, TCL_LEAVE_ERR_MSG)) {
 		code = TCL_ERROR;
 		goto finally;
 	}
@@ -561,6 +603,24 @@ static void free_pidata(ClientData cdata, Tcl_Interp* interp) //{{{
 	Tcl_HashEntry*	he = NULL;
 
 	if (l) {
+		/*
+		 * Degrade all tracked objects to pure strings before freeing
+		 * handlers.  This prevents use-after-free when literal objs
+		 * are freed later (by TclDeleteLiteralTable) after the
+		 * Tcl_ObjType structs in the handlers have been freed.
+		 *
+		 * Always restart from the head: Tcl_FreeInternalRep calls
+		 * our free_int_rep which unlinks the current node, and the
+		 * callbacks could mutate the list in other ways.
+		 */
+		while (l->tracker_head.next != &l->tracker_tail) {
+			struct obj_tracker*	tracker = l->tracker_head.next;
+
+			if (!Tcl_InterpDeleted(interp))
+				(void)Tcl_GetString(tracker->obj);
+			Tcl_FreeInternalRep(tracker->obj);
+		}
+
 		he = Tcl_FirstHashEntry(&l->types, &search);
 		for (; he; he=Tcl_NextHashEntry(&search)) {
 			struct objtype_ex*	handlers = Tcl_GetHashValue(he);
@@ -603,7 +663,7 @@ DLLEXPORT int Type_Init(Tcl_Interp* interp) //{{{
 	int				i;
 
 #ifdef USE_TCL_STUBS
-	if (Tcl_InitStubs(interp, "8.6", 0) == NULL)
+	if (Tcl_InitStubs(interp, "8.6-10", 0) == NULL)
 		return TCL_ERROR;
 #endif // USE_TCL_STUBS
 
@@ -621,6 +681,8 @@ DLLEXPORT int Type_Init(Tcl_Interp* interp) //{{{
 	 * present, in the hope that someday it will be.
 	 */
 	Tcl_InitObjHashTable(&l->types);
+	l->tracker_head.next = &l->tracker_tail;
+	l->tracker_tail.prev = &l->tracker_head;
 
 	for (i=0; i<LIT_END; i++)
 		replace_tclobj(&l->lit[i], Tcl_NewStringObj(lit_strings[i], -1));
@@ -665,24 +727,22 @@ DLLEXPORT int Type_Unload(Tcl_Interp* interp, int flags) //{{{
 {
 	Tcl_Namespace*		ns;
 
-	switch (flags) {
-		case TCL_UNLOAD_DETACH_FROM_INTERPRETER:
-			ns = Tcl_FindNamespace(interp, NS, NULL, TCL_GLOBAL_ONLY);
-			if (ns) {
-				Tcl_DeleteNamespace(ns);
-				ns = NULL;
-			}
-			break;
-		case TCL_UNLOAD_DETACH_FROM_PROCESS:
-			ns = Tcl_FindNamespace(interp, NS, NULL, TCL_GLOBAL_ONLY);
-			if (ns) {
-				Tcl_DeleteNamespace(ns);
-				ns = NULL;
-			}
-			break;
-		default:
-			THROW_ERROR("Unhandled flags");
+	if (flags != TCL_UNLOAD_DETACH_FROM_INTERPRETER &&
+		flags != TCL_UNLOAD_DETACH_FROM_PROCESS)
+		THROW_ERROR("Unhandled flags");
+
+	ns = Tcl_FindNamespace(interp, NS, NULL, TCL_GLOBAL_ONLY);
+	if (ns) {
+		Tcl_DeleteNamespace(ns);
+		ns = NULL;
 	}
+
+	/*
+	 * Trigger free_pidata while the interp is still functional.
+	 * This degrades all tracked objects to pure strings before the
+	 * extension's Tcl_ObjType callbacks are unmapped.
+	 */
+	Tcl_DeleteAssocData(interp, "type");
 
 	return TCL_OK;
 }
