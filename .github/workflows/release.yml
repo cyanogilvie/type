@@ -66,16 +66,14 @@ jobs:
 
     - name: Create source tarball
       run: |
-        # Copy workspace (with submodules), strip .git, resolve symlinks
-        cp -a . "/tmp/${{ steps.version.outputs.project }}"
-        find "/tmp/${{ steps.version.outputs.project }}" -name '.git' -exec rm -rf {} +
-        rm -rf "/tmp/${{ steps.version.outputs.project }}/.github"
-        rm -rf "/tmp/${{ steps.version.outputs.project }}/build" "/tmp/${{ steps.version.outputs.project }}/buildwin"
-        tar czf "/tmp/${{ steps.version.outputs.project }}.tar.gz" \
-          -C /tmp --dereference \
-          "${{ steps.version.outputs.project }}"
-        cd /tmp && zip -rq "${{ steps.version.outputs.project }}-source.zip" \
-          "${{ steps.version.outputs.project }}"
+        project="${{ steps.version.outputs.project }}"
+        # Copy workspace dereferencing symlinks, then strip .git and build dirs
+        cp -aL . "/tmp/${project}"
+        find "/tmp/${project}" -name '.git' -exec rm -rf {} +
+        rm -rf "/tmp/${project}/.github"
+        rm -rf "/tmp/${project}/build" "/tmp/${project}/buildwin"
+        tar czf "/tmp/${project}.tar.gz" -C /tmp "${project}"
+        cd /tmp && zip -rq "${project}-source.zip" "${project}"
 
     - name: Package Windows binaries
       run: |
