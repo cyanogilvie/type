@@ -50,7 +50,7 @@ jobs:
         cpu = 'x86_64'
         endian = 'little'
         EOF
-        meson setup buildwin --cross-file /tmp/cross-mingw64.ini
+        meson setup buildwin --cross-file /tmp/cross-mingw64.ini --buildtype=release -Ddebug=true
         meson compile -C buildwin
 
     - name: Test Windows build under wine
