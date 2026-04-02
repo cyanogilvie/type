@@ -43,6 +43,7 @@ jobs:
 
         [properties]
         sys_root = '/usr/x86_64-w64-mingw32'
+        pkg_config_libdir = '/nonexistent'
 
         [host_machine]
         system = 'windows'
