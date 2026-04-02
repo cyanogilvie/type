@@ -1,1 +1,1 @@
-doc/objtype.md
+doc/type.md.in
