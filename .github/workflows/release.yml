@@ -67,11 +67,18 @@ jobs:
     - name: Create source tarball
       run: |
         project="${{ steps.version.outputs.project }}"
-        # Copy workspace dereferencing symlinks, then strip .git and build dirs
+        # Generate README.md from docs
+        meson compile -C build readme
+        cp build/doc/README.md README.md
+        # Copy workspace dereferencing symlinks, then strip build artifacts
         cp -aL . "/tmp/${project}"
         find "/tmp/${project}" -name '.git' -exec rm -rf {} +
         rm -rf "/tmp/${project}/.github"
         rm -rf "/tmp/${project}/build" "/tmp/${project}/buildwin"
+        rm -rf "/tmp/${project}/subprojects/packagecache"
+        rm -rf "/tmp/${project}/subprojects/tcl"
+        rm -rf "/tmp/${project}/subprojects/libtommath-"*
+        rm -rf "/tmp/${project}/subprojects/.wraplock"
         tar czf "/tmp/${project}.tar.gz" -C /tmp "${project}"
         cd /tmp && zip -rq "${project}-source.zip" "${project}"
 

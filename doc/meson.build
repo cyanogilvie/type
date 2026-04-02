@@ -29,5 +29,15 @@ if pandoc.found()
     build_by_default: true,
   )
 
+  doc_targets += custom_target('readme',
+    input:    doc_md,
+    output:   'README.md',
+    command:  [pandoc, '--from', 'markdown', '--to', 'gfm',
+      '@INPUT@', '--output', '@OUTPUT@'],
+    install_dir:      meson.project_source_root(),
+    install_tag:      'source',
+    build_by_default: false,
+  )
+
   alias_target('doc', doc_targets)
 endif
