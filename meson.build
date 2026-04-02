@@ -28,6 +28,6 @@ pkg_sources = files(
   'generic/names.c',
 )
 
-subdir('teabase/init')
+#subdir('teabase/init')
 subdir('teabase')
 subdir('doc')

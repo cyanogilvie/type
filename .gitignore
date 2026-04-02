@@ -12,3 +12,7 @@ tags
 last
 /doc/*.n
 /doc/objtype.md
+/subprojects/.wraplock
+/subprojects/packagecache
+/subprojects/tcl
+/subprojects/libtommath-1.3.0

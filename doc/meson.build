@@ -14,8 +14,9 @@ if pandoc.found()
     output:   'objtype.n',
     command:  [pandoc, '--standalone', '--from', 'markdown', '--to', 'man',
       '@INPUT@', '--output', '@OUTPUT@'],
+    install: true,
     install_dir:      get_option('mandir'),
-    build_by_default: false,
+    build_by_default: true,
   )
 
   alias_target('doc', doc_targets)
