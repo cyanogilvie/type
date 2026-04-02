@@ -207,8 +207,8 @@ libraries:
 # end user machine when building from source.
 #========================================================================
 
-doc: doc/objtype.md
-	pandoc --standalone --from markdown --to man doc/objtype.md --output doc/objtype.n
+doc: doc/type.md
+	pandoc --standalone --from markdown --to man doc/type.md --output doc/type.n
 
 install: all install-binaries install-libraries install-doc
 

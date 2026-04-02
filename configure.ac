@@ -183,7 +183,7 @@ TEA_PROG_TCLSH
 # substituting the AC variables in. Include these here.
 #--------------------------------------------------------------------
 
-AC_CONFIG_FILES([Makefile pkgIndex.tcl doc/objtype.md])
+AC_CONFIG_FILES([Makefile pkgIndex.tcl doc/type.md])
 #AC_CONFIG_FILES([sampleConfig.sh])
 
 #--------------------------------------------------------------------

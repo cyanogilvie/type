@@ -11,7 +11,7 @@ config.status
 tags
 last
 /doc/*.n
-/doc/objtype.md
+/doc/type.md
 /subprojects/.wraplock
 /subprojects/packagecache
 /subprojects/tcl

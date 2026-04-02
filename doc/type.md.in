@@ -368,6 +368,70 @@ with the Tcl C API.  This extension exposes the feature to Tcl scripts, so
 that new custom Tcl_ObjTypes can be defined and used entirely on the 
 script layer, with greater ease and safety than implementing the type in C.
 
+# BUILDING
+
+This package has no dependencies beyond Tcl 9.0.  The build system is
+`meson`, which will find Tcl using its pkg-config file.  Use the
+`PKG_CONFIG_PATH` environment variable to point meson to it if Tcl is
+installed in a nonstandard location.
+
+## From a Release Tarball
+
+Download and extract [the release](https://github.com/cyanogilvie/@PACKAGE_NAME@/releases), then:
+
+```sh
+tar xf @PACKAGE_NAME@-v@PACKAGE_VERSION@.tar.gz
+cd @PACKAGE_NAME@-v@PACKAGE_VERSION@
+meson setup builddir --buildtype=release
+meson compile -C builddir
+meson install -C builddir
+```
+
+## From the Git Sources
+
+Fetch [the code](https://github.com/cyanogilvie/@PACKAGE_NAME@) and submodules
+recursively, then build:
+
+```sh
+git clone --recurse-submodules https://github.com/cyanogilvie/@PACKAGE_NAME@
+cd @PACKAGE_NAME@
+meson setup builddir --buildtype=release
+meson compile -C builddir
+meson install -C builddir
+```
+
+## In a Docker Build
+
+Build from a specified release version, minimising image size:
+
+```dockerfile
+WORKDIR /tmp/@PACKAGE_NAME@
+RUN wget https://github.com/cyanogilvie/@PACKAGE_NAME@/releases/download/v@PACKAGE_VERSION@/@PACKAGE_NAME@-v@PACKAGE_VERSION@.tar.gz -O - | tar xz --strip-components=1 && \
+    meson setup builddir --buildtype=release && \
+    meson install -C builddir && \
+    cd .. && rm -rf @PACKAGE_NAME@
+```
+
+## Testing
+
+Run the test suite after building:
+
+```sh
+meson test -C builddir
+```
+
+Under `valgrind` (requires a debug build of Tcl, e.g. `CFLAGS="-DPURIFY -Og"`):
+
+```sh
+meson test -C builddir --wrapper 'valgrind --keep-debuginfo=yes --track-origins=yes --trace-children=yes'
+```
+
+## Windows
+
+Pre-built Windows binaries are available from
+[the releases page](https://github.com/cyanogilvie/@PACKAGE_NAME@/releases).
+Extract the zip into a directory on Tcl's package search path.
+
 # TODO
 
 Expose a stubs interface so that other extensions built in C can define custom
