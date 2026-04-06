@@ -86,7 +86,7 @@ jobs:
       run: |
         pkg_dir="type-${{ steps.version.outputs.version }}"
         mkdir -p "/tmp/win/${pkg_dir}"
-        cp buildwin/teabase/libtype.dll "/tmp/win/${pkg_dir}/"
+        cp buildwin/teabase/*type.dll "/tmp/win/${pkg_dir}/"
         cp buildwin/teabase/pkgIndex.tcl "/tmp/win/${pkg_dir}/"
         cp buildwin/doc/type.html "/tmp/win/${pkg_dir}/type.html"
         cd /tmp/win
