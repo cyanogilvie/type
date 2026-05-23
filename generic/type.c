@@ -1,20 +1,11 @@
-#if HAVE_CONFIG_H
 #include <config.h>
-#endif
-
-#include <tcl.h>
-
-/* Tcl_Size compat for Tcl 8 (autotools builds without config.h) */
-#ifndef TCL_SIZE_MAX
-typedef int Tcl_Size;
-# define TCL_SIZE_MODIFIER ""
-#endif
 
 #include <string.h>
-#include "tclstuff.h"
-#include "tip445.h"
+#include <tcl.h>
+#include <tclstuff.h>
+#include <tip445.h>
 #if DEBUG
-#	include "names.h"
+#	include <names.h>
 #endif
 
 #ifdef __builtin_expect

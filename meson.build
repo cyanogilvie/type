@@ -1,5 +1,5 @@
 project('type', 'c',
-  version:          '0.3',
+  version:          '0.4',
   default_options:  ['c_std=c11', 'warning_level=3', 'werror=true'],
   meson_version:    '>=1.3.0',
 )
@@ -25,9 +25,21 @@ inc = [include_directories('generic')]
 
 pkg_sources = files(
   'generic/type.c',
-  'generic/names.c',
 )
+if get_option('debug')
+  pkg_sources += files(
+    'teabase/names.c'
+  )
+endif
 
 #subdir('teabase/init')
 subdir('teabase')
 subdir('doc')
+
+type_dep = declare_dependency(
+  variables: {
+    'tcl_pkg_path': fs.parent(pkg_so.full_path()),
+    'version':      meson.project_version(),
+  },
+)
+meson.override_dependency(meson.project_name(), type_dep)
