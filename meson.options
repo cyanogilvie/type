@@ -1,0 +1,5 @@
+option('debugmode',
+  type:   'boolean',
+  value:  false,
+  description:  'Enable debug mode (not symbols, but portions of the code that are only used in debug builds)'
+)

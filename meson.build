@@ -12,6 +12,10 @@ if get_option('debug')
   add_project_arguments(cc.get_supported_arguments(['-ggdb3']), language: 'c')
 endif
 
+if get_option('debugmode')
+  add_project_arguments('-DDEBUG=1')
+endif
+
 add_project_arguments('-Wno-missing-field-initializers', language: 'c')
 
 conf = configuration_data()
@@ -26,7 +30,7 @@ inc = [include_directories('generic')]
 pkg_sources = files(
   'generic/type.c',
 )
-if get_option('debug')
+if get_option('debugmode')
   pkg_sources += files(
     'teabase/names.c'
   )
